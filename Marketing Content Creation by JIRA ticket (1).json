@@ -1,0 +1,322 @@
+{
+  "name": "Marketing Content Creation by JIRA ticket",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const rawOutput =\n$input.first().json.output ||\n$input.first().json.text ||\n'{}';\n\nlet parsed;\n\ntry {\nconst cleanOutput = rawOutput\n.replace(/`json/g, '')\n    .replace(/`/g, '')\n.trim();\n\nparsed = JSON.parse(cleanOutput);\n\n} catch (error) {\n\nparsed = {\nbrandCheckPassed: false,\nerror: error.message,\nrawOutput\n};\n\n}\n\nreturn [{ json: parsed }];\n"
+      },
+      "name": "Code — Parse Agent Output1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        48
+      ],
+      "id": "5ab65b0e-9c17-417a-ac03-bd54d02ebf97"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        224,
+        272
+      ],
+      "id": "1bb7a422-9eaf-4410-8f24-91bc93bdd79b",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "A29v5yoSPTvYd3pK",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -304,
+        48
+      ],
+      "id": "551661ca-d8fb-4005-ae25-e6b96e12c83b",
+      "name": "When chat message received",
+      "webhookId": "de96c0b0-d3f6-4c0d-85bf-016c817d4fbe"
+    },
+    {
+      "parameters": {
+        "text": "==You are the AI Marketing Content Agent.\n\nYour role:\nGenerate brand-compliant marketing campaign content.\n\nCOMPANY BRAND STANDARDS:\n\n* Tone: Professional, confident, human\n* Voice: Active voice only\n* Never use:\n  cheap, buy now, amazing, revolutionary\n* Prefer:\n  efficient, proven, discover, deliver\n* CTA style:\n  Clear and benefit-led\n* Never use spam trigger words:\n  free*, win*, guarantee*, click here\n* Never make unsubstantiated claims\n\nCAMPAIGN BRIEF:\n{{ $json.chatInput }}\n\nTASK:\nGenerate ONLY valid JSON.\n\nRequired JSON format:\n{\n\"headline\": \"\",\n\"bodyPoints\": [],\n\"cta\": \"\",\n\"metrics\": {\n\"reach\": \"\",\n\"engagement\": \"\",\n\"conversion\": \"\",\n\"roi\": \"\"\n},\n\"brandCheckPassed\": true,\n\"brandCheckNotes\": \"\"\n}\n",
+        "options": {
+          "systemMessage": "You are an expert marketing content strategist and AI agent. Always use tools before generating final output. Return valid .PPTX and JSON in your final answer."
+        }
+      },
+      "name": "AI Agent — Content + PPT Generator1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1,
+      "position": [
+        144,
+        48
+      ],
+      "id": "cbb541b3-dd64-4a08-a995-5df197fa3ef6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "brand_pass",
+              "leftValue": "={{ $json.brandCheckPassed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "name": "IF — Brand Check Passed?2",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        720,
+        48
+      ],
+      "id": "d639f65e-b76a-4022-baf0-0931f1cf6f8a"
+    },
+    {
+      "parameters": {
+        "subject": "=[APPROVAL NEEDED] {{ $json.campaign_name }} — AI-Generated Content Ready",
+        "message": "={{ $json.headline }}{{ $json.bodyPoints }}",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "=data"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1392,
+        48
+      ],
+      "id": "2d5f63cc-7d77-40df-bbc1-b17588eeb828",
+      "name": "Send a message",
+      "webhookId": "ac4bd175-978e-4238-9c91-f1380b168aab",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Tw3bOO9tObNn7yVe",
+          "name": "Gmail OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "generate_ppt_tool",
+        "description": "Generates a branded PowerPoint (.pptx) file from structured campaign content. Input must be a JSON string with fields: campaignName, channel, headline, bodyPoints (array), cta, metrics (object with reach/engagement/conversion/roi), author, companyName, primaryColor, accentColor. Returns the file path of the generated PPTX.\n",
+        "jsCode": "const pptxgen = require('pptxgenjs');\n\nconst input = $input.first().json;\n\nconst pptx = new pptxgen();\n\npptx.author = 'AI Agent';\npptx.company = 'GreatBots';\n\npptx.layout = 'LAYOUT_WIDE';\n\nconst slide = pptx.addSlide();\n\nslide.background = {\ncolor: 'FFFFFF'\n};\n\nslide.addText(input.headline || 'Campaign Headline', {\nx: 0.5,\ny: 0.5,\nw: 11,\nh: 0.8,\nfontSize: 24,\nbold: true,\ncolor: '1F4E78'\n});\n\nslide.addText(\n(input.bodyPoints || []).join('\\n\\n'),\n{\nx: 0.7,\ny: 1.5,\nw: 11,\nh: 3.5,\nfontSize: 16,\ncolor: '333333',\nbreakLine: false\n}\n);\n\nslide.addText(`CTA: ${input.cta}`, {\nx: 0.7,\ny: 5.4,\nw: 8,\nh: 0.5,\nfontSize: 18,\nbold: true,\ncolor: '008000'\n});\n\nslide.addText(\n`Reach: ${input.metrics?.reach}\nEngagement: ${input.metrics?.engagement}\nConversion: ${input.metrics?.conversion}\nROI: ${input.metrics?.roi}`,\n{\nx: 8,\ny: 5,\nw: 4,\nh: 1,\nfontSize: 12,\ncolor: '555555'\n}\n);\n\nconst fileName = `${Date.now()}.pptx`;\n\nconst filePath =\n`C:\\\\Users\\\\GreatBots\\\\Downloads\\\\files1\\\\${fileName}`;\n\nawait pptx.writeFile({\nfileName: filePath\n});\n\nreturn [\n{\njson: {\n...input,\npptPath: filePath,\nfileName\n}\n}\n];\n"
+      },
+      "name": "Tool — Generate PPT2",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        384
+      ],
+      "id": "c93ce993-4002-4e98-9c2a-78e414adc986"
+    },
+    {
+      "parameters": {
+        "title": "=={{ $json.headline }}"
+      },
+      "type": "n8n-nodes-base.googleSlides",
+      "typeVersion": 2,
+      "position": [
+        944,
+        48
+      ],
+      "id": "28da5f5b-f595-4b17-a004-12f945e0c121",
+      "name": "Create a presentation",
+      "credentials": {
+        "googleSlidesOAuth2Api": {
+          "id": "BxsYTlLGS8EbjLFV",
+          "name": "Google Slides OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1168,
+        48
+      ],
+      "id": "dfd71b35-4ea4-4e40-b93b-a49cfd0f6b64",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "events": [
+          "jira:issue_created"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.jiraTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -272,
+        224
+      ],
+      "id": "81b72e98-bc53-41a1-b040-24de754dfed7",
+      "name": "Jira Trigger",
+      "webhookId": "d0f9872d-3d83-4c08-bd23-8c5230382940",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "T0smR1a9MvSMF3gG",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "AI Agent — Content + PPT Generator1": [
+      {
+        "json": {
+          "output": "{\n  \"headline\": \"Why Apples Deliver Everyday Benefits\",\n  \"bodyPoints\": [\n    \"Nutritional support: Apples deliver fiber and vitamin C to support digestion and immune health.\",\n    \"Convenient energy: A portable snack with natural sugars and complex carbohydrates for sustained energy.\",\n    \"Versatile use: Eat raw, bake, or add apples to salads to boost flavor and nutrition.\",\n    \"Sustainable choice: Local sourcing and efficient storage help reduce food waste.\"\n  ],\n  \"cta\": \"Discover how apples deliver value\",\n  \"metrics\": {\n    \"reach\": \"500000\",\n    \"engagement\": \"10000\",\n    \"conversion\": \"2%\",\n    \"roi\": \"4:1\"\n  },\n  \"pptPath\": \"\",\n  \"brandCheckPassed\": true,\n  \"brandCheckNotes\": \"I validated the brief against the brand standards and it passed. Content uses active voice, approved vocabulary, and avoids banned terms. I used the system responses and received the generated campaign payload back, but that response did not include a PPTX file path — please re-run the export if you need the file location.\"\n}"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Code — Parse Agent Output1": {
+      "main": [
+        [
+          {
+            "node": "IF — Brand Check Passed?2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent — Content + PPT Generator1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent — Content + PPT Generator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent — Content + PPT Generator1": {
+      "main": [
+        [
+          {
+            "node": "Code — Parse Agent Output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF — Brand Check Passed?2": {
+      "main": [
+        [
+          {
+            "node": "Create a presentation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool — Generate PPT2": {
+      "ai_tool": [
+        []
+      ]
+    },
+    "Create a presentation": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent — Content + PPT Generator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0b03ae4c-ed48-45ff-9db0-d55982c58637",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "38b172d5c0e88fe55ffb28ff8545eb402012c1d06e36d763d348d10847b4c2a5"
+  },
+  "id": "ziCFZuT986LoqVgt",
+  "tags": []
+}
